@@ -7,26 +7,24 @@ from django.core.exceptions import ObjectDoesNotExist
 from .models import *
 from .forms import *
 
-def menu_list(request):
-    all_menus = Menu.objects.all()
-    menus = []
-    for menu in all_menus:
-        if menu.expiration_date >= timezone.now():
-            menus.append(menu)
 
-    menus = sorted(menus, key=attrgetter('expiration_date'))
-    return render(request, 'menu/list_all_current_menus.html', {'menus': menus})
+def menu_list(request):
+    all_menus = Menu.objects.prefetch_related('items').filter(
+        expiration_date__gte=timezone.now()).order_by('expiration_date')
+
+    return render(request, 'menu/list_all_current_menus.html', {'menus': all_menus})
 
 def menu_detail(request, pk):
-    menu = Menu.objects.get(pk=pk)
+    menu = get_object_or_404(Menu, pk=pk)
+
     return render(request, 'menu/menu_detail.html', {'menu': menu})
 
+
 def item_detail(request, pk):
-    try: 
-        item = Item.objects.get(pk=pk)
-    except ObjectDoesNotExist:
-        raise Http404
+    item = get_object_or_404(Item, pk=pk)
+
     return render(request, 'menu/detail_item.html', {'item': item})
+
 
 def create_new_menu(request):
     if request.method == "POST":
@@ -40,16 +38,18 @@ def create_new_menu(request):
         form = MenuForm()
     return render(request, 'menu/menu_edit.html', {'form': form})
 
+
 def edit_menu(request, pk):
     menu = get_object_or_404(Menu, pk=pk)
+
     items = Item.objects.all()
+
     if request.method == "POST":
-        menu.season = request.POST.get('season', '')
-        menu.expiration_date = datetime.strptime(request.POST.get('expiration_date', ''), '%m/%d/%Y')
-        menu.items = request.POST.get('items', '')
-        menu.save()
+        form = MenuForm(request.POST)
+        if form.is_valid():
+            menu = form.save()
 
     return render(request, 'menu/change_menu.html', {
         'menu': menu,
         'items': items,
-        })
+    })
